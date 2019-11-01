@@ -1,0 +1,29 @@
+import pandas as pd
+import os
+import pickle
+from sklearn.feature_extraction.text import TfidfVectorizer
+"""
+IF-IDF:词频-逆向文本频率
+在文本处理时，将文字转换为模型可以处理的向量（文字->向量）
+字词的重要性和文本中出现的频率成正比（IF），与其在语料库出现的频率成反比（IDF，文本中频繁出现但不重要的单词）
+
+"""
+
+corpus_path = 'C:/Users/77037/PycharmProjects/untitled/labeled-June-10min(P)-RAN-20191023.csv'
+
+out_dir = '../generate_tfidf'
+output_name = os.path.split(corpus_path)[1]
+output_name = output_name[:output_name.rfind('.')]
+
+df = pd.read_csv(corpus_path, header=0)
+# 对alarmname生成特征向量
+vecterizer = TfidfVectorizer()  # 构建一个计算TF-IDF的函数
+x_for_sk = df['Alarm Name'].str.strip().dropna().values
+
+# 分词并建立词汇表
+vecterizer.fit(x_for_sk)  # 将文本语料库x_for_sk，得到词频矩阵
+print(vecterizer.vocabulary_)  # 单词列表的key+value， 出现过的词和频数（去除空格的单个单词）
+
+with open(os.path.join(out_dir, output_name+'-TFIDF.pkl'), 'wb') as f:
+    # 将对象vecterizer(函数+函数内参数)保存到文件f中
+    pickle.dump(vecterizer, f)
