@@ -11,3 +11,6 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"   # 不使用GPU
 
 # 加载数据
 train_dataset_path = "../labeled_june-train-sub5000.csv"
+
+# 加载数据有待改进
+#lala
