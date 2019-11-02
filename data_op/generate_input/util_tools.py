@@ -1,3 +1,4 @@
+from __future__ import unicode_literals, print_function, division
 import pandas as pd
 import os
 
@@ -39,6 +40,15 @@ def func_add0(x):
     return x
 
 
+# turn a unicode string to plain ascii
+def unicodeToAscii(s):
+    return ''.join(
+        c for c in unicodedata.normalize('NFD', s)
+        if unicodedata.category(c) != 'Mn'
+        and c in all_letters
+    )
+
+
 # 获取alarmname的第一次出现的顺序{[alarm name]: 序号}
 def getAlarmOrderDict(filepath=None):
     if filepath is None:
@@ -53,9 +63,10 @@ def getAlarmOrderDict(filepath=None):
         alarmOrderDict[item] = index + 1
     return alarmOrderDict
 
+from collections import OrderedDict
 
 if __name__=='__main__':
     # 文件为mmhc_input的csv
     a = getAlarmOrderDict("C:/Users/77037/PycharmProjects/untitled/" +
                           "labeled_june-01_new.csv")
-    print(a)
+    print(len(a), a)
