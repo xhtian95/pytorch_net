@@ -8,7 +8,8 @@ from BiLSTM import BLSTM
 
 from torchvision import models
 
-
+# 输入维度（batch，num_nodes节点数目，nfeat输入特征数）
+# 输出维度（batch， num_nodes节点数目)
 class BiLSTM_GAT(nn.Module):
     def __init__(self, nfeat, nhid, nclass, in_drop, coef_drop, alpha, nheads, batch,
                  num_lstm, lstm_hidsize, lstm_numlayers):
@@ -76,6 +77,7 @@ if __name__=="__main__":
     batch = 3
     a = torch.rand(batch, num_nodes, n_features)
     print(a.size())
+    print(a)
     net = BiLSTM_GAT(nfeat=n_features, nhid=hidden_units, nclass=1, in_drop=0, coef_drop=0, alpha=0.2, nheads=8, batch=3,
                  num_lstm=num_lstm, lstm_hidsize=8, lstm_numlayers=2)
 

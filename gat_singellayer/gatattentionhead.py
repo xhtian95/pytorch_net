@@ -4,6 +4,9 @@ import torch.nn.functional as F
 
 
 # concat确定是前几层head直接并行处理出特征结果还是最后一层取平均数后再进行sigmoid取结果
+# 输入为矩阵a:(batch, nodes节点数，in_features输入特征数)
+# 邻接矩阵adj:(batch, nodes节点数，nodes）
+# 输出为(batch, nodes节点数，out_features输出特征数)
 class GraphAttentionHead2(nn.Module):
     def __init__(self, in_features, out_features, in_drop, coef_drop, alpha, concat=True):
 

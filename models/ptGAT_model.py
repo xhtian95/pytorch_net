@@ -21,6 +21,9 @@ class DNN(nn.Module):
         return x  # 与CrossEntropyLoss()对应
 
 
+# 输入为矩阵a:(batch, nodes节点数，nfeat输入特征数)
+# 邻接矩阵adj:(batch, nodes节点数，nodes）
+# 输出为(batch, nodes节点数)
 class GAT(nn.Module):
     def __init__(self, nfeat, nhid, nclass, in_drop, coef_drop, alpha, nheads, last_layer=True):
         """dense version of GAT"""
@@ -37,6 +40,7 @@ class GAT(nn.Module):
             # self.attention_i = first_attentions(i)
 
         # 第二层只有一个head
+        # nclass=1为了降低最后输出(batch, nodes节点数，nclass输出特征数)，去除最后一个维度，使最终结果与节点数相关
         self.out_att = GraphAttentionHead2(nhid * nheads, nclass, in_drop, coef_drop, alpha, concat=False)
 
     def forward(self, x, adj):
@@ -47,7 +51,7 @@ class GAT(nn.Module):
 
         # final layer/prediction layer, using average, 推迟非线性变换（softmax，logistic sigmoid）
         x = self.out_att(x, adj)
-        # 输出维度：(图数目，节点数目，nclass)
+        # 输出维度：(图数目，节点数目即num_nodes)
 
         if self.last_layer==False:
             return x

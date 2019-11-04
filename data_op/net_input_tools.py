@@ -44,8 +44,7 @@ def generate_input2(alarm_id_name, binarizationFlag=False):
     return new_input
 
 
-
-
+# generate_input3/4分别比1/2多了两个输出
 def generate_input3(alarm_id_name, binarizationFlag=False):
     # binarizationFlag:处理结果文件保留二值性与否
     # 输入dataframe 包括ID, alarm name, ID从1开始连续编号，表示这一个片的
@@ -55,7 +54,6 @@ def generate_input3(alarm_id_name, binarizationFlag=False):
     rows = alarm_id_name['ID'].unique()  # 去掉重复元素
     cols = alarm_id_name['Alarm Name'].unique()
     new_input = pd.DataFrame(np.zeros((len(rows), len(cols)), dtype=np.int), columns=cols)
-    singid_alarm_tensor = torch.tensor(1, )
 
     # zip(a,b): 将对象打包为元组
     for a, b in zip(id_input, name_input):
