@@ -67,6 +67,8 @@ entire_num_list = len(id_input)
 
 
 """===========================将名字转化为tensor类型==============================="""
+
+
 # ids为id，alarm name的字典，每一个id对应其序列中alarmname组成的列表
 # id_input, name_input分别为为去重的id和alarm name 数组，两数组的类型numpy.ndarray
 def generate_ids_listi(id_input, name_input):
@@ -83,6 +85,7 @@ def generate_ids_listi(id_input, name_input):
         if i == len(id_input)-1:
             ids[k] = listi
     return ids
+
 
 # 全局的{id: alarm name list}字典
 ids = generate_ids_listi(id_input, name_input)

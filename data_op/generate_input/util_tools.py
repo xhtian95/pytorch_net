@@ -70,3 +70,26 @@ if __name__=='__main__':
     a = getAlarmOrderDict("C:/Users/77037/PycharmProjects/untitled/" +
                           "labeled_june-01_new.csv")
     print(len(a), a)
+
+
+"""related to word2vec"""
+# 获取词对应索引及索引对应词的字典
+class Lang:
+    def __init__(self, name, vocab_list, SOS_token, EOS_token):
+        """
+        :param name:字典对应名称
+        :param vocab_list: 字典列表
+        :param SOS_token: 开始符
+        :param EOS_token: 结束符
+        """
+        super(Lang, self).__init__()
+        self.name = name
+        self.SOS_token = SOS_token
+        self.EOS_token = EOS_token
+        self.word2index = {}
+        self.index2word = {}
+
+        for index, word in enumerate(vocab_list):
+            self.word2index[word] = index
+            self.index2word[index] = word
+        self.n_words = len(self.word2index)
