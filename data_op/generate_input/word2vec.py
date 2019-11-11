@@ -74,7 +74,7 @@ print('alarm sequence length: ', padd_seq_len)
 # alarm name的list集合
 alarm_name_list = []
 root_list = []
-# 字典中所有的alarm
+# 字典中所有的alarm(去重，等价于求dictionary）
 singel_alarm_list = []
 # 所有的id列表
 ids_list = dataset_target['ID'].unique().tolist()
@@ -84,10 +84,16 @@ for eid in ids_list:
     cur_df = dataset_target[dataset_target['ID'] == eid]
     alarm_name_list.append(cur_df['Alarm Name'].values.tolist())
     root_list.append(cur_df['Root Alarm'].values.tolist()[0])  # 单个root alarm的类型为str
-    singel_alarm_list.append(alarm for alarm in cur_df['Alarm Name'].values.tolist())
+    for alarm in cur_df['Alarm Name'].values.tolist():
+        singel_alarm_list.append(alarm)
+    alarm_dic = list(set(singel_alarm_list))
 
+print("alarm dictionary")
+print(alarm_dic)
+print(singel_alarm_list)
 alarm_count = len(singel_alarm_list)
 
+# """
 print('ids_list[:20]')
 print(ids_list[:20])
 print('alarm_name_list[:20]')
@@ -96,6 +102,7 @@ print('root_list[:20]')
 print(root_list[:20])
 print('alarm_count:')
 print(alarm_count)
+# """
 
 word2vec_size = 200
 """
@@ -160,8 +167,8 @@ def training(category_tensor, id_alarm_list):
 
     for i in range(id_alarm_list.size()[0]):
         output, h_out = rnn(id_alarm_list[i], h_out)
-    print(output.dtype)
-    print(category_tensor.dtype)
+    # print(output.dtype)
+    # print(category_tensor.dtype)
     # category_tensor = category_tensor.float()
 
     loss = criterion(output, category_tensor)
@@ -174,18 +181,30 @@ def training(category_tensor, id_alarm_list):
     return output, loss.item()
 
 
-from sklearn.metrics.pairwise import cosine_similarity
+def get_att_dis(target, alarm_dic):
+    attention_distribution = []
+    for alarm in alarm_dic:
+        behaviored = torch.from_numpy(word2vec_model.wv[alarm])
+        attention_score = torch.cosine_similarity(target.view(1, -1), behaviored.view(1, -1))  # 计算每个元素与给定元素的余弦相似度
+        attention_distribution.append(attention_score)
+    attention_distribution = torch.Tensor(attention_distribution)
 
+    return attention_distribution / torch.sum(attention_distribution, 0)  # 标准化
+
+"""
 # 将网络输出的output（单个类别的特征向量）转化为各个类别的相似度向量
-def netoutputToCategoryID(output):
-    output_list = output.numpy().tolist()
-    similar =
-    for alarm in singel_alarm_list:
-        cosine_similarity(output_list, alarm)
-
+def netoutputSimilar(output, alarm_dic):
+    # output_list = output.numpy().tolist()
+    similar = torch.Tensor(1, len(alarm_dic))
+    for i, alarm in enumerate(alarm_dic):
+        similar[0][i] = torch.cosine_similarity(output, word2vec_model.wv[alarm])
+    return similar
+"""
 
 # 网络预测的输出类型
 def categoryFromOutput(output):
+    # .topk(input, k, dim=None, largest=True, sorted=True, out=None) -> (Tensor, LongTensor)
+    # 沿给定的dim维度返回输入张量input中k个最大值
     top_n, top_i = output.topk(1)
     category_i = top_i[0].item()
     return category_i
@@ -209,26 +228,28 @@ start = time.time()
 current_loss = 0
 all_loss = []
 
+len_id = len(ids_list)
 
 for ith, id in enumerate(ids_list):
     ith_alarm, ith_root, ith_alarm_tensor, ith_category_tensor = idlineToTensor(ith, alarm_name_list, root_list)
 
     output, loss = training(ith_category_tensor, ith_alarm_tensor)
-    print(type(output))
-    print(output.shape)
-    print(loss)
+    # print(type(output))
+    # print(output.shape)
+    # print(loss)
     current_loss += loss
 
-    """
+    similarity = get_att_dis(output, alarm_dic)
+
     if ith % print_every == 0:
-        guess_index = categoryFromOutput(output)
-        correct = '√' if train_id_root[guess_index] == category_name else 'x (%s)' % category_name
-        print('%d %d%% (%s) %.4f %s / %s %s' % (train_id, train_id / train_id_num * 100, timeSince(start),
-                                                loss, train_id_alarm_list, train_id_root[guess_index], correct))
-    """
+        guess_index = categoryFromOutput(similarity)
+        correct = '√' if alarm_dic[guess_index] == ith_root else 'x (%s)' % ith_root
+        print('%d %d%% (%s) %.4f %s / %s %s' % (id, ith / len_id * 100, timeSince(start),
+                                                loss, alarm_name_list[ith], alarm_dic[guess_index], correct))
+
     # 添加当前平均损失
-    if ith == len(ids_list):
-        all_loss.append(current_loss / len(ids_list))
+    if ith == len_id:
+        all_loss.append(current_loss / len_id)
         current_loss = 0
 
 # 绘制损失函数图
