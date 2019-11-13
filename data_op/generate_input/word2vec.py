@@ -36,57 +36,75 @@ class RNN(nn.Module):
         return torch.zeros(1, self.hidden_size)
 
 
-# 读取文件数据
+"""======================================读取文件数据，数据处理========================================"""
 # dataset_path = "C:/Users/77037/PycharmProjects/untitled/LSTM_gat_data/labeled_june-train-sub5000.csv"
-dataset_path = "../../../LSTM_gat_data/labeled_june-train-sub5000.csv"
-my_data = pd.read_csv(dataset_path, header=0, index_col=None)
+# dataset_path = "../../../LSTM_gat_data/labeled_june-train-sub5000.csv"
+main_dataset_path = "../../../LSTM_gat_data/labeled-June-10min(P)-RAN-20191023.csv"
+# my_data = pd.read_csv(dataset_path, header=0, index_col=None)
 
-drop_duplicates = False
-padd_seq_len = None
 
-# 过滤掉没有根因的
-dropId = set({})
-for egroup in my_data.groupby(by='ID'):
-    if 1 not in egroup[1]['Label'].values:
-        dropId.add(egroup[0])
-data = my_data[my_data['ID'].isin(dropId) == False]
-# data_target只包含接下来用到的列
-useful_cols = ['ID', 'Alarm Name', 'Label', 'Root Alarm']
+# 输出按序列去重后的数据列表及各个id中含有的告警数计数列表
+def data_option(data_path, drop_duplicates=False, padd_seq_len=None):
 
-if drop_duplicates:
-    # 去重
-    dataset_target = data[useful_cols].drop_duplicates()
-else:
-    dataset_target = data[useful_cols]
+    my_data = pd.read_csv(data_path, header=0, index_col=None)
 
-if padd_seq_len is None:
-    # 各个id的告警计数写入对应的特征：dataset_target.groupby(by='ID').count()
-    # .value_counts()：对所有alarmname出现次数值对应的次数记录（如有10个id都有5个告警，则对应的输出为 5 10）
-    # 降序排列id内告警个数
-    alarm_seq_len_distribution = dataset_target.groupby(by='ID').count()['Alarm Name'].value_counts().sort_index(
-        ascending=False
-    )
-    print(alarm_seq_len_distribution)
-    # padding by max len，id内包含告警个数的最大值
-    padd_seq_len = alarm_seq_len_distribution.index[0]
-print('alarm sequence length: ', padd_seq_len)
+    # 过滤掉没有根因的
+    dropId = set({})
+    for egroup in my_data.groupby(by='ID'):
+        if 1 not in egroup[1]['Label'].values:
+            dropId.add(egroup[0])
+    data = my_data[my_data['ID'].isin(dropId) == False]
+    # data_target只包含接下来用到的列
+    useful_cols = ['ID', 'Alarm Name', 'Label', 'Root Alarm']
 
-# alarm name的list集合
-alarm_name_list = []
-root_list = []
-# 字典中所有的alarm(去重，等价于求dictionary）
-singel_alarm_list = []
-# 所有的id列表
-ids_list = dataset_target['ID'].unique().tolist()
+    if drop_duplicates:
+        # 去重
+        dataset_target = data[useful_cols].drop_duplicates()
+    else:
+        dataset_target = data[useful_cols]
 
-# 按ID记录各个alarm的特征数据
-for eid in ids_list:
-    cur_df = dataset_target[dataset_target['ID'] == eid]
-    alarm_name_list.append(cur_df['Alarm Name'].values.tolist())
-    root_list.append(cur_df['Root Alarm'].values.tolist()[0])  # 单个root alarm的类型为str
-    for alarm in cur_df['Alarm Name'].values.tolist():
-        singel_alarm_list.append(alarm)
-    alarm_dic = list(set(singel_alarm_list))
+    if padd_seq_len is None:
+        # 各个id的告警计数写入对应的特征：dataset_target.groupby(by='ID').count()
+        # .value_counts()：对所有alarmname出现次数值对应的次数记录（如有10个id都有5个告警，则对应的输出为 5 10）
+        # 降序排列id内告警个数
+        alarm_seq_len_distribution = dataset_target.groupby(by='ID').count()['Alarm Name'].value_counts().sort_index(
+            ascending=False
+        )
+        # print(alarm_seq_len_distribution)
+        # padding by max len，id内包含告警个数的最大值
+
+    return dataset_target, alarm_seq_len_distribution
+
+
+# 输出按序列去重后的数据列表及各个id中含有的告警数计数列表
+dataset_target, alarm_seq_len_distribution = data_option(main_dataset_path, drop_duplicates=False,
+                                                         padd_seq_len=None)
+padd_seq_len = alarm_seq_len_distribution.index[0]
+
+
+# 生成后续训练和验证所需的特征列表
+def generate_feat_list(dataset_target):
+    # alarm name的list集合
+    alarm_name_list = []
+    root_list = []
+    # 字典中所有的alarm(去重，等价于求dictionary）
+    singel_alarm_list = []
+    # 所有的id列表
+    ids_list = dataset_target['ID'].unique().tolist()
+
+    # 按ID记录各个alarm的特征数据
+    for eid in ids_list:
+        cur_df = dataset_target[dataset_target['ID'] == eid]
+        alarm_name_list.append(cur_df['Alarm Name'].values.tolist())
+        root_list.append(cur_df['Root Alarm'].values.tolist()[0])  # 单个root alarm的类型为str
+        for alarm in cur_df['Alarm Name'].values.tolist():
+            singel_alarm_list.append(alarm)
+        alarm_dic = list(set(singel_alarm_list))
+
+    return alarm_name_list, root_list, singel_alarm_list, ids_list, alarm_dic
+
+
+alarm_name_list, root_list, singel_alarm_list, ids_list, alarm_dic = generate_feat_list(dataset_target)
 
 print("alarm dictionary")
 print(alarm_dic)
@@ -104,6 +122,8 @@ print('alarm_count:')
 print(alarm_count)
 # """
 
+
+# 训练word2vec
 word2vec_size = 200
 """
 size：映射后向量的位数维数
@@ -210,8 +230,9 @@ def categoryFromOutput(output):
     return category_i
 
 
+# 开始训练
 # 计时
-print_every = 500
+print_every = 1000
 plot_every = 1000
 
 
@@ -221,6 +242,13 @@ def timeSince(since):
     m = math.floor(s / 60)
     s -= m * 60
     return '%dm %ds' % (m, s)
+
+train_dataset_path = "../../../LSTM_gat_data/labeled_june-train.csv"
+
+train_target, train_alarm_seq_len_distribution = data_option(train_dataset_path, drop_duplicates=False,
+                                                         padd_seq_len=None)
+train_alarm_name_list, train_root_list, singel_alarm_list, ids_list, alarm_dic = generate_feat_list(train_target)
+_, _, train_alarm_name_tensor, train_category = idlineToTensor(0, train_alarm_name_list, train_root_list)
 
 
 start = time.time()
@@ -247,12 +275,34 @@ for ith, id in enumerate(ids_list):
         print('%d %d%% (%s) %.4f %s / %s %s' % (id, ith / len_id * 100, timeSince(start),
                                                 loss, alarm_name_list[ith], alarm_dic[guess_index], correct))
 
-    # 添加当前平均损失
-    if ith == len_id:
-        all_loss.append(current_loss / len_id)
+    # 添加当前平均损失，实时观测
+    if ith / plot_every == 0:
+        all_loss.append(current_loss / plot_every)
         current_loss = 0
 
 # 绘制损失函数图
 plt.figure()
 plt.plot(all_loss)
 plt.show()
+
+"""=========================evaluate results=========================="""
+confusion = torch.zeros(alarm_count, alarm_count)
+n_confusion = 1000
+
+
+# 不计算损失和参数变化， 其他和train过程相同
+def evaluate(id_alarm_list):
+    h_out = rnn.initHidden()
+
+    rnn.zero_grad()
+
+    for i in range(id_alarm_list.size()[0]):
+        output, h_out = rnn(id_alarm_list[i], h_out)
+    # print(output.dtype)
+    # print(category_tensor.dtype)
+    # category_tensor = category_tensor.float()
+
+    return output
+
+
+for i in range(n_confusion):
