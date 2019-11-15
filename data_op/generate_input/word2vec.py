@@ -7,6 +7,7 @@ import time
 import math
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 
 """=================RNN====================="""
 import torch.nn as nn
@@ -37,9 +38,9 @@ class RNN(nn.Module):
 
 
 """======================================读取文件数据，数据处理========================================"""
-# dataset_path = "C:/Users/77037/PycharmProjects/untitled/LSTM_gat_data/labeled_june-train-sub5000.csv"
+# dataset_path = ""../../../LSTM_gat_data/labeled-June-10min(P)-RAN-20191023.csv"
 # dataset_path = "../../../LSTM_gat_data/labeled_june-train-sub5000.csv"
-main_dataset_path = "../../../LSTM_gat_data/labeled-June-10min(P)-RAN-20191023.csv"
+main_dataset_path = "../../../LSTM_gat_data/labeled_june.csv"
 # my_data = pd.read_csv(dataset_path, header=0, index_col=None)
 
 
@@ -97,19 +98,19 @@ def generate_feat_list(dataset_target):
         cur_df = dataset_target[dataset_target['ID'] == eid]
         alarm_name_list.append(cur_df['Alarm Name'].values.tolist())
         root_list.append(cur_df['Root Alarm'].values.tolist()[0])  # 单个root alarm的类型为str
-        for alarm in cur_df['Alarm Name'].values.tolist():
-            singel_alarm_list.append(alarm)
-        alarm_dic = list(set(singel_alarm_list))
+
+    singel_alarm_list = dataset_target['Alarm Name'].values.tolist()
+    alarm_dic = list(set(singel_alarm_list))  # 去重
 
     return alarm_name_list, root_list, singel_alarm_list, ids_list, alarm_dic
 
 
+# 生成后续训练和验证所需的特征列表
 alarm_name_list, root_list, singel_alarm_list, ids_list, alarm_dic = generate_feat_list(dataset_target)
 
 print("alarm dictionary")
-print(alarm_dic)
-print(singel_alarm_list)
-alarm_count = len(singel_alarm_list)
+print(alarm_dic[:50])
+alarm_count = len(alarm_dic)
 
 # """
 print('ids_list[:20]')
@@ -221,6 +222,7 @@ def netoutputSimilar(output, alarm_dic):
     return similar
 """
 
+
 # 网络预测的输出类型
 def categoryFromOutput(output):
     # .topk(input, k, dim=None, largest=True, sorted=True, out=None) -> (Tensor, LongTensor)
@@ -230,12 +232,6 @@ def categoryFromOutput(output):
     return category_i
 
 
-# 开始训练
-# 计时
-print_every = 1000
-plot_every = 1000
-
-
 def timeSince(since):
     now = time.time()
     s = now - since
@@ -243,23 +239,31 @@ def timeSince(since):
     s -= m * 60
     return '%dm %ds' % (m, s)
 
-train_dataset_path = "../../../LSTM_gat_data/labeled_june-train.csv"
 
+# 开始训练
+# 计时
+print_every = 1000
+plot_every = 1000
+
+train_dataset_path = "../../../LSTM_gat_data/labeled_june-train.csv"
+# 输出按序列去重后的数据列表及各个id中含有的告警数计数列表
 train_target, train_alarm_seq_len_distribution = data_option(train_dataset_path, drop_duplicates=False,
                                                          padd_seq_len=None)
-train_alarm_name_list, train_root_list, singel_alarm_list, ids_list, alarm_dic = generate_feat_list(train_target)
-_, _, train_alarm_name_tensor, train_category = idlineToTensor(0, train_alarm_name_list, train_root_list)
-
+# 生成后续训练和验证所需的特征列表
+train_alarm_name_list, train_root_list, singel_alarm_list, train_ids_list, _ = generate_feat_list(train_target)
+# 告警id（序列）的数量
+len_id = len(train_ids_list)
 
 start = time.time()
 
 current_loss = 0
 all_loss = []
+correct_num = 0
 
-len_id = len(ids_list)
-
-for ith, id in enumerate(ids_list):
-    ith_alarm, ith_root, ith_alarm_tensor, ith_category_tensor = idlineToTensor(ith, alarm_name_list, root_list)
+for ith, id in enumerate(train_ids_list):
+    # 输入第ith个序列索引，全局告警名和根因列表，输出网络所需tensor及对应的category
+    ith_alarm, ith_root, ith_alarm_tensor, ith_category_tensor = idlineToTensor(ith, train_alarm_name_list,
+                                                                                train_root_list)
 
     output, loss = training(ith_category_tensor, ith_alarm_tensor)
     # print(type(output))
@@ -268,17 +272,27 @@ for ith, id in enumerate(ids_list):
     current_loss += loss
 
     similarity = get_att_dis(output, alarm_dic)
+    guess_index = categoryFromOutput(similarity)
 
-    if ith % print_every == 0:
-        guess_index = categoryFromOutput(similarity)
+    if alarm_dic[guess_index] == ith_root:
+        correct_num += 1
+
+    if ith % print_every == 0 and ith != 0:
         correct = '√' if alarm_dic[guess_index] == ith_root else 'x (%s)' % ith_root
         print('%d %d%% (%s) %.4f %s / %s %s' % (id, ith / len_id * 100, timeSince(start),
                                                 loss, alarm_name_list[ith], alarm_dic[guess_index], correct))
+        accuracy = correct_num / print_every * 100
+        print("accuracy: ", accuracy)
+        correct_num = 0
+
+    if ith > 400:
+        break
 
     # 添加当前平均损失，实时观测
     if ith / plot_every == 0:
         all_loss.append(current_loss / plot_every)
         current_loss = 0
+
 
 # 绘制损失函数图
 plt.figure()
@@ -305,4 +319,59 @@ def evaluate(id_alarm_list):
     return output
 
 
-for i in range(n_confusion):
+test_dataset_path = "../../../LSTM_gat_data/labeled_june-test.csv"
+# 输出按序列去重后的数据列表及各个id中含有的告警数计数列表
+test_target, test_alarm_seq_len_distribution = data_option(test_dataset_path, drop_duplicates=False,
+                                                         padd_seq_len=None)
+# 生成后续训练和验证所需的特征列表
+train_alarm_name_list, train_root_list, singel_alarm_list, test_ids_list, _ = generate_feat_list(test_target)
+len_test_id = len(test_ids_list)
+
+correct_num = 0
+
+for ith, id in enumerate(test_ids_list):
+    # 输入第ith个序列索引，全局告警名和根因列表，输出网络所需tensor及对应的category
+    ith_alarm, ith_root, ith_alarm_tensor, ith_category_tensor = idlineToTensor(ith, train_alarm_name_list,
+                                                                                train_root_list)
+    output = evaluate(ith_alarm_tensor)
+    similarity = get_att_dis(output, alarm_dic)
+    guess_index = categoryFromOutput(similarity)
+    ith_label = alarm_dic.index(ith_root)
+    # 横轴为label，纵轴为预测标签，出现即次数+1
+    confusion[ith_label][guess_index] += 1
+
+    if ith_label == guess_index:
+        correct_num += 1
+
+    if ith % print_every == 0 and ith != 0:
+        accuracy = correct_num / ith
+        print('%d %d%% (%s) accuracy = %.4f' % (id, ith / len_test_id * 100, timeSince(start), accuracy))
+        accuracy = correct_num / print_every * 100
+        print("accuracy: ", accuracy)
+        correct_num = 0
+
+    if ith > 400:
+        break
+
+# 取值
+for i in range(alarm_count):
+    confusion[i] = confusion[i] / confusion[i].sum()
+
+# 建立plot
+fig = plt.figure()
+ax = fig.add_subplot(111)
+cax = ax.matshow(confusion.numpy())
+fig.colorbar(cax)
+
+# 建立axes坐标轴
+ax.set_xticklabels([''] + alarm_dic, rotation=90)
+ax.set_yticklabels([''] + alarm_dic)
+
+# force label at every tick
+ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
+
+# sphinx_gallery_thumbnail_number = 2
+plt.show()
+
+
